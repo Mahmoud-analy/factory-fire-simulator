@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>محاكاة مصنع: توزيع الطفايات ومسارات الهروب</title>
+<style>
+:root{
+  --navy:#1F3864;--gold:#B08D57;--bg:#F7F5F1;--card:#FFFFFF;--text:#1d2430;--muted:#6b7280;--border:#E3E0D8;--green:#2E7D32;--red:#C62828;
+  box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#15181f;--card:#1d2129;--text:#eceef1;--muted:#9aa3af;--border:#333945;}}
+:root[data-theme="dark"]{--bg:#15181f;--card:#1d2129;--text:#eceef1;--muted:#9aa3af;--border:#333945;}
+*{box-sizing:border-box;}
+html,body{margin:0;background:var(--bg);color:var(--text);font-family:"Segoe UI",Tahoma,Arial,sans-serif;}
+.app{max-width:820px;margin:0 auto;padding:16px 14px 50px;}
+header{text-align:center;margin-bottom:8px;}
+header h1{color:var(--navy);font-size:1.25rem;margin:0 0 3px;}
+header p{color:var(--gold);font-weight:600;margin:0;font-size:.84rem;}
+.bar{display:flex;flex-wrap:wrap;gap:7px;margin:12px 0;align-items:center;}
+.chip{padding:8px 13px;border:1px solid var(--border);border-radius:18px;background:var(--card);font-size:.82rem;cursor:pointer;color:var(--text);font-weight:600;}
+.chip.on{background:var(--navy);color:#fff;border-color:var(--navy);}
+.btn{padding:8px 13px;border:none;border-radius:9px;font-size:.8rem;font-weight:700;cursor:pointer;background:var(--navy);color:#fff;}
+.btn.g{background:var(--card);color:var(--text);border:1px solid var(--border);}
+.hint{font-size:.82rem;color:var(--muted);margin:0 0 8px;min-height:20px;}
+canvas{width:100%;border:1px solid var(--border);border-radius:10px;background:#fff;display:block;cursor:crosshair;touch-action:manipulation;}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0;}
+.st{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:9px;text-align:center;}
+.st b{display:block;font-size:1.25rem;color:var(--navy);}
+.st span{font-size:.7rem;color:var(--muted);}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px;margin-top:10px;}
+.card h3{margin:0 0 8px;font-size:.95rem;color:var(--navy);}
+table{width:100%;border-collapse:collapse;font-size:.8rem;}
+th,td{padding:6px 5px;border-bottom:1px solid var(--border);text-align:center;}
+th{color:var(--muted);font-weight:600;font-size:.72rem;}
+.ok{color:var(--green);font-weight:700;}.no{color:var(--red);font-weight:700;}
+.fr{font-size:.84rem;line-height:2;}
+.lg{display:flex;flex-wrap:wrap;gap:10px;font-size:.72rem;color:var(--muted);margin-top:8px;}
+.lg i{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:middle;margin-left:4px;}
+.note{font-size:.74rem;color:var(--muted);line-height:1.9;margin-top:10px;}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>🏭 محاكاة مصنع: توزيع الطفايات ومسارات الهروب</h1>
+    <p>Factory Fire Safety Simulator — مسافة المشي الفعلية حول العوائق</p>
+  </header>
+
+  <div class="bar">
+    <button class="chip on" id="m1" onclick="mode('plan')">🧯 وضع التوزيع</button>
+    <button class="chip" id="m2" onclick="mode('fire')">🔥 وضع اختبار الحريق</button>
+    <button class="btn" onclick="auto()">⚡ اقتراح تلقائي</button>
+    <button class="btn g" onclick="clearAll()">مسح</button>
+    <button class="btn g" id="hb" onclick="heat=!heat;draw()">🎨 خريطة التغطية</button>
+  </div>
+  <p class="hint" id="hint"></p>
+  <canvas id="cv"></canvas>
+  <div class="lg">
+    <span><i style="background:rgba(46,125,50,.35)"></i>مغطى بمسافة المشي</span>
+    <span><i style="background:rgba(198,40,40,.3)"></i>خارج التغطية</span>
+    <span><i style="background:#C62828"></i>طفاية</span>
+    <span><i style="background:#2E7D32"></i>مخرج</span>
+  </div>
+
+  <div class="stats">
+    <div class="st"><b id="nEx">0</b><span>عدد الطفايات</span></div>
+    <div class="st"><b id="cov">0%</b><span>تغطية المصنع</span></div>
+    <div class="st"><b id="zok">0/5</b><span>مناطق مطابقة</span></div>
+  </div>
+  <div class="card" id="fireCard" style="display:none"><h3>🔥 نتيجة اختبار الحريق</h3><div class="fr" id="fireRes"></div></div>
+  <div class="card"><h3>📋 تقييم المناطق</h3><table id="zt"></table></div>
+  <div class="note">
+    الخريطة بمقياس 1 م لكل مربع، والمسافة تُحسب بأقصر مسار مشي حول الحوائط والماكينات والرفوف (مع السماح بالمشي المائل).
+    الحدود وفق OSHA 29 CFR 1910.157: النوع A = 22.9 م (75 قدمًا)، والنوع B = 15.2 م (50 قدمًا) من منطقة الخطر، وطُبّق نفس حد B على لوحة الكهرباء (C) احتياطًا.
+    حد مسافة الهروب المستخدم 61 م (200 قدم) لمبنى بدون رشاشات، كما في مشروع تقييم مسالك الهروب. المصنع افتراضي لأغراض التدريب، والقياس الفعلي في الموقع هو المرجع.
+  </div>
+</div>
+
+<script>
+const W=40,H=24,$=id=>document.getElementById(id);
+const g=Array.from({length:H},()=>Array(W).fill(0));
+function rc(x1,y1,x2,y2,v){for(let y=y1;y<=y2;y++)for(let x=x1;x<=x2;x++)g[y][x]=v;}
+rc(0,0,W-1,0,1);rc(0,H-1,W-1,H-1,1);rc(0,0,0,H-1,1);rc(W-1,0,W-1,H-1,1);
+rc(9,0,9,7,1);rc(0,7,9,7,1);g[7][5]=0;                 // المكتب + بابه
+rc(30,0,30,7,1);rc(30,7,W-1,7,1);g[4][30]=0;           // مخزن الدهانات + بابه
+const EXITS=[{x:0,y:14,n:'E1'},{x:W-1,y:18,n:'E2'},{x:30,y:H-1,n:'E3'}];
+EXITS.forEach(e=>g[e.y][e.x]=0);
+const OB=[[12,10,15,12,'منشار'],[19,10,24,12,'تخديم'],[27,10,29,12,'صنفرة'],[13,16,15,18,'مثقاب'],[19,16,21,18,'جلخ'],[25,16,32,18,'طاولات تجميع'],[2,17,4,21,'رفوف'],[7,17,9,21,'رفوف']];
+OB.forEach(o=>rc(o[0],o[1],o[2],o[3],2));
+const ZONES=[
+ {n:'مخزن الدهانات (B)',c:'B',lim:15.2,r:[31,1,38,6],col:'rgba(230,126,34,.18)'},
+ {n:'لوحة الكهرباء (C)',c:'C',lim:15.2,r:[18,21,22,22],col:'rgba(241,196,15,.30)'},
+ {n:'مخزن الأخشاب (A)',c:'A',lim:22.9,r:[1,15,10,22],col:'rgba(160,110,60,.18)'},
+ {n:'المكتب (A)',c:'A',lim:22.9,r:[1,1,8,6],col:'rgba(52,152,219,.14)'},
+ {n:'صالة الإنتاج (A)',c:'A',lim:22.9,r:null,col:null}
+];
+function zoneIdx(x,y){for(let i=0;i<4;i++){const r=ZONES[i].r;if(x>=r[0]&&x<=r[2]&&y>=r[1]&&y<=r[3])return i;}return 4;}
+const id=(x,y)=>y*W+x, free=(x,y)=>x>=0&&y>=0&&x<W&&y<H&&g[y][x]===0;
+const cells=[];for(let y=0;y<H;y++)for(let x=0;x<W;x++)if(g[y][x]===0)cells.push(id(x,y));
+const zoneOf=new Int8Array(W*H).fill(-1);cells.forEach(i=>zoneOf[i]=zoneIdx(i%W,(i/W)|0));
+const lim=i=>ZONES[zoneOf[i]].lim;
+const isW=(x,y)=>x>=0&&y>=0&&x<W&&y<H&&g[y][x]===1;
+const mountable=(x,y)=>free(x,y)&&x>0&&y>0&&x<W-1&&y<H-1&&(isW(x+1,y)||isW(x-1,y)||isW(x,y+1)||isW(x,y-1));
+
+// ---- Dijkstra (heap) ----
+function dijkstra(src,maxD=1e9){
+  const d=new Float64Array(W*H).fill(1e9),p=new Int32Array(W*H).fill(-1),h=[];
+  const push=(k,v)=>{h.push([k,v]);let i=h.length-1;while(i>0){const q=(i-1)>>1;if(h[q][0]<=h[i][0])break;[h[q],h[i]]=[h[i],h[q]];i=q;}};
+  const pop=()=>{const t=h[0],l=h.pop();if(h.length){h[0]=l;let i=0;for(;;){let a=2*i+1,b=a+1,m=i;if(a<h.length&&h[a][0]<h[m][0])m=a;if(b<h.length&&h[b][0]<h[m][0])m=b;if(m===i)break;[h[m],h[i]]=[h[i],h[m]];i=m;}}return t;};
+  src.forEach(s=>{d[s]=0;push(0,s);});
+  while(h.length){
+    const [k,u]=pop();if(k>d[u])continue;if(k>maxD)break;
+    const x=u%W,y=(u/W)|0;
+    for(let dx=-1;dx<=1;dx++)for(let dy=-1;dy<=1;dy++){
+      if(!dx&&!dy)continue;const nx=x+dx,ny=y+dy;if(!free(nx,ny))continue;
+      if(dx&&dy&&(!free(x+dx,y)||!free(x,y+dy)))continue;
+      const nd=k+(dx&&dy?1.4142:1),v=id(nx,ny);if(nd<d[v]){d[v]=nd;p[v]=u;push(nd,v);}
+    }
+  }
+  return{d,p};
+}
+function pathTo(p,t){const a=[];for(let v=t;v!==-1;v=p[v])a.push([v%W,(v/W)|0]);return a;}
+
+// ---- state ----
+let ex=[],heat=true,md='plan',fire=null,cv=$('cv'),sc=10,D=null;
+function mode(m){md=m;$('m1').classList.toggle('on',m==='plan');$('m2').classList.toggle('on',m==='fire');fire=null;$('fireCard').style.display='none';
+  $('hint').textContent=m==='plan'?'اضغط قرب أي جدار لوضع طفاية (تُثبَّت على أقرب جدار، ولا تُعلَّق على الماكينات). اضغط على طفاية لحذفها.':'اضغط على أي نقطة داخل المصنع لتحديد مكان الحريق.';draw();}
+function clearAll(){ex=[];fire=null;$('fireCard').style.display='none';draw();}
+function resize(){const w=Math.min(cv.parentElement.clientWidth,820),d=devicePixelRatio||1;cv.style.height=(w*H/W)+'px';cv.width=Math.round(w*d);cv.height=Math.round(w*H/W*d);sc=cv.width/W;draw();}
+
+function evaluate(){
+  D=ex.length?dijkstra(ex.map(e=>id(e.x,e.y))):null;
+  let okc=0;const mx=ZONES.map(()=>0);
+  cells.forEach(i=>{const v=D?D.d[i]:1e9;if(v<=lim(i))okc++;if(v>mx[zoneOf[i]])mx[zoneOf[i]]=v;});
+  let zo=0;
+  $('zt').innerHTML='<tr><th>المنطقة</th><th>الحد</th><th>أبعد نقطة</th><th>الحالة</th></tr>'+ZONES.map((z,i)=>{
+    const ok=mx[i]<=z.lim;if(ok)zo++;
+    return `<tr><td>${z.n}</td><td>${z.lim} م</td><td>${mx[i]>=1e8?'—':mx[i].toFixed(1)+' م'}</td><td class="${ok?'ok':'no'}">${ok?'✓ مطابق':'✗ غير مطابق'}</td></tr>`;}).join('');
+  $('nEx').textContent=ex.length;$('cov').textContent=Math.round(okc/cells.length*100)+'%';$('zok').textContent=zo+'/5';
+}
+function draw(){
+  evaluate();
+  const c=cv.getContext('2d');c.clearRect(0,0,cv.width,cv.height);c.fillStyle='#fff';c.fillRect(0,0,cv.width,cv.height);
+  ZONES.slice(0,4).forEach(z=>{c.fillStyle=z.col;c.fillRect(z.r[0]*sc,z.r[1]*sc,(z.r[2]-z.r[0]+1)*sc,(z.r[3]-z.r[1]+1)*sc);});
+  if(heat)cells.forEach(i=>{const v=D?D.d[i]:1e9;c.fillStyle=v<=lim(i)?'rgba(46,125,50,.28)':'rgba(198,40,40,.22)';c.fillRect((i%W)*sc,((i/W)|0)*sc,sc+.5,sc+.5);});
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+    if(g[y][x]===1){c.fillStyle='#1F3864';c.fillRect(x*sc,y*sc,sc+.5,sc+.5);}
+    else if(g[y][x]===2){c.fillStyle='#8a7a6a';c.fillRect(x*sc,y*sc,sc+.5,sc+.5);}
+  }
+  const fs=Math.max(9,sc*.75);c.font='bold '+fs+'px sans-serif';c.textAlign='center';c.textBaseline='middle';
+  OB.forEach(o=>{c.fillStyle='#fff';const w=(o[2]-o[0]+1),h=(o[3]-o[1]+1);
+    if(h>w){c.save();c.translate((o[0]+w/2)*sc,(o[1]+h/2)*sc);c.rotate(-Math.PI/2);c.fillText(o[4],0,0);c.restore();}else c.fillText(o[4],(o[0]+w/2)*sc,(o[1]+h/2)*sc);});
+  c.fillStyle='#1F3864';c.font=fs+'px sans-serif';
+  [['المكتب',4.5,3.5],['مخزن الدهانات',34.5,3.5],['مخزن الأخشاب',5.5,16],['لوحة الكهرباء',20,20.2],['صالة الإنتاج',20,6.5]].forEach(t=>c.fillText(t[0],t[1]*sc,t[2]*sc));
+  c.fillStyle='#F1C40F';c.fillRect(19*sc,(H-1)*sc,3*sc,sc);                       // لوحة الكهرباء على الجدار
+  EXITS.forEach(e=>{c.fillStyle='#2E7D32';c.fillRect(e.x*sc,e.y*sc,sc,sc);c.fillStyle='#2E7D32';c.font='bold '+fs+'px sans-serif';
+    c.fillText(e.n,Math.min(Math.max((e.x+.5)*sc,sc*1.6),(W-1.6)*sc),Math.min(Math.max((e.y+.5)*sc,sc*1.6),(H-1.6)*sc)+(e.y===H-1?-sc*1.2:0));});
+  if(fire){
+    const s=dijkstra([id(fire.x,fire.y)]);
+    // أقرب طفاية وأقرب مخرج
+    let be=null,bd=1e9;ex.forEach(e=>{const v=s.d[id(e.x,e.y)];if(v<bd){bd=v;be=e;}});
+    let bx=null,bxd=1e9;EXITS.forEach(e=>{const v=s.d[id(e.x,e.y)];if(v<bxd){bxd=v;bx=e;}});
+    const line=(pts,col)=>{c.beginPath();pts.forEach((q,i)=>i?c.lineTo((q[0]+.5)*sc,(q[1]+.5)*sc):c.moveTo((q[0]+.5)*sc,(q[1]+.5)*sc));c.strokeStyle=col;c.lineWidth=Math.max(3,sc*.3);c.setLineDash([sc*.6,sc*.4]);c.stroke();c.setLineDash([]);};
+    const tag=(pts,txt,col,dy)=>{const m=pts[Math.floor(pts.length/2)],tx=(m[0]+.5)*sc,ty=(m[1]+.5)*sc+dy*sc;
+      c.font='bold '+Math.max(10,sc*.85)+'px sans-serif';const tw=c.measureText(txt).width+sc*.9,th=sc*1.5;
+      c.fillStyle=col;c.beginPath();c.roundRect?c.roundRect(tx-tw/2,ty-th/2,tw,th,th/2):c.rect(tx-tw/2,ty-th/2,tw,th);c.fill();
+      c.strokeStyle='#fff';c.lineWidth=2;c.stroke();c.fillStyle='#fff';c.textAlign='center';c.textBaseline='middle';c.fillText(txt,tx,ty+1);};
+    let pe=null,px=null;
+    if(be){pe=pathTo(s.p,id(be.x,be.y));line(pe,'#C62828');}
+    if(bx){px=pathTo(s.p,id(bx.x,bx.y));line(px,'#2E7D32');}
+    if(pe)tag(pe,bd.toFixed(1)+' م','#C62828',-1.6);
+    if(px)tag(px,bxd.toFixed(1)+' م','#2E7D32',pe&&Math.hypot(pe[Math.floor(pe.length/2)][0]-px[Math.floor(px.length/2)][0],pe[Math.floor(pe.length/2)][1]-px[Math.floor(px.length/2)][1])<5?1.6:-1.6);
+    c.font=(sc*2.2)+'px sans-serif';c.fillText('🔥',(fire.x+.5)*sc,(fire.y+.5)*sc);
+    const L=lim(id(fire.x,fire.y)),z=ZONES[zoneOf[id(fire.x,fire.y)]];
+    const e1=be?(bd<=L?`<span class="ok">✓ ضمن الحد (${L} م)</span>`:`<span class="no">✗ يتجاوز الحد (${L} م)</span>`):'<span class="no">لا توجد طفايات</span>';
+    const e2=bxd<=61?'<span class="ok">✓ ضمن 61 م</span>':'<span class="no">✗ يتجاوز 61 م</span>';
+    $('fireCard').style.display='block';
+    $('fireRes').innerHTML=`📍 موقع الحريق: <b>${z.n}</b><br>🧯 أقرب طفاية بمسافة مشي: <b>${be?bd.toFixed(1)+' م':'—'}</b> ${e1}<br>🚪 أقرب مخرج (${bx.n}) بمسافة مشي: <b>${bxd.toFixed(1)} م</b> ${e2}<br><span style="color:var(--muted);font-size:.76rem">الخط الأحمر: مسار الطفاية · الخط الأخضر: مسار الهروب</span>`;
+  }
+  ex.forEach(e=>{c.beginPath();c.arc((e.x+.5)*sc,(e.y+.5)*sc,sc*.9,0,7);c.fillStyle='#C62828';c.fill();c.strokeStyle='#fff';c.lineWidth=2;c.stroke();
+    c.fillStyle='#fff';c.font='bold '+(sc*1.1)+'px sans-serif';c.fillText('F',(e.x+.5)*sc,(e.y+.55)*sc);});
+}
+cv.addEventListener('click',ev=>{
+  const r=cv.getBoundingClientRect(),fx=(ev.clientX-r.left)/r.width*W,fy=(ev.clientY-r.top)/r.height*H,x=Math.floor(fx),y=Math.floor(fy);
+  if(md==='fire'){if(free(x,y)){fire={x,y};draw();}return;}
+  const i=ex.findIndex(e=>Math.hypot(e.x+.5-fx,e.y+.5-fy)<1.6);
+  if(i>=0){ex.splice(i,1);draw();return;}
+  let best=null,bd=1e9;
+  for(let yy=Math.max(1,y-5);yy<=Math.min(H-2,y+5);yy++)for(let xx=Math.max(1,x-5);xx<=Math.min(W-2,x+5);xx++)
+    if(mountable(xx,yy)){const d=Math.hypot(xx-fx,yy-fy);if(d<bd){bd=d;best={x:xx,y:yy};}}
+  if(best&&ex.length<16){ex.push(best);draw();}
+});
+function auto(){
+  const cand=cells.filter(i=>mountable(i%W,(i/W)|0));
+  const cov=cand.map(ci=>{const s=dijkstra([ci],22.9);return cells.filter(i=>s.d[i]<=lim(i));});
+  const left=new Set(cells);ex=[];
+  while(left.size&&ex.length<16){
+    let bi=-1,bn=0;cov.forEach((cl,k)=>{let n=0;cl.forEach(i=>{if(left.has(i))n++;});if(n>bn){bn=n;bi=k;}});
+    if(bi<0)break;cov[bi].forEach(i=>left.delete(i));ex.push({x:cand[bi]%W,y:(cand[bi]/W)|0});
+  }
+  draw();
+}
+window.addEventListener('resize',resize);mode('plan');resize();
+</script>
+</body>
+</html>
